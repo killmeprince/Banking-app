@@ -1,0 +1,25 @@
+package service
+
+import (
+	"banking-app/config"
+	"crypto/tls"
+
+	mail "gopkg.in/gomail.v2"
+)
+
+func SendEmail(to, subject, body string) error {
+	m := mail.NewMessage()
+	m.SetHeader("From", config.SMTPUser)
+	m.SetHeader("To", to)
+	m.SetHeader("Subject", subject)
+	m.SetBody("text/html", body)
+
+	d := mail.NewDialer(
+		config.SMTPHost,
+		config.SMTPPort,
+		config.SMTPUser,
+		config.SMTPPass,
+	)
+	d.TLSConfig = &tls.Config{InsecureSkipVerify: false}
+	return d.DialAndSend(m)
+}
