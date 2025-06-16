@@ -10,6 +10,6 @@ type Card struct {
 	CVVHash     string    `db:"cvv_hash" json:"-"`
 	HMAC        string    `db:"hmac" json:"-"`
 	CreatedAt   time.Time `db:"created_at" json:"created_at"`
-	NumberPlain string    `db:"-" json:"number,omitempty"`
-	ExpiryPlain string    `db:"-" json:"expiry,omitempty"`
+	NumberPlain string    `db:"number_plain" json:"number,omitempty"`
+	ExpiryPlain string    `db:"expiry_plain" json:"expiry,omitempty"`
 }

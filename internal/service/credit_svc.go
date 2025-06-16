@@ -1,20 +1,21 @@
 package service
 
 import (
-	"math"
-	"time"
-
 	"banking-app/internal/models"
 	"banking-app/internal/repository"
+	"banking-app/internal/service/mail"
+	"math"
+	"time"
 )
 
 type CreditService struct {
-	repo   *repository.CreditRepo
-	psRepo *repository.PSRepo
+	repo    *repository.CreditRepo
+	psRepo  *repository.PSRepo
+	accRepo *repository.AccountRepo
 }
 
-func NewCreditService(r *repository.CreditRepo, p *repository.PSRepo) *CreditService {
-	return &CreditService{r, p}
+func NewCreditService(r *repository.CreditRepo, p *repository.PSRepo, a *repository.AccountRepo) *CreditService {
+	return &CreditService{r, p, a}
 }
 
 func (s *CreditService) Create(accID int64, principal, annualRate float64, termMonths int) (*models.Credit, error) {
@@ -55,4 +56,25 @@ func computeAnnuitySchedule(c *models.Credit) []models.PaymentSchedule {
 		})
 	}
 	return sched
+}
+
+func (s *CreditService) DebitScheduledPayments() error {
+	schedules, err := s.psRepo.UnpaidDue(time.Now())
+	if err != nil {
+		return err
+	}
+	for _, sched := range schedules {
+		acc, err := s.accRepo.ByID(sched.AccountID)
+		if err != nil || acc.Balance < sched.Amount {
+			continue
+		}
+		if err := s.accRepo.UpdateBalance(sched.AccountID, -sched.Amount); err != nil {
+			continue
+		}
+		if err := s.psRepo.MarkPaid(sched.ID); err != nil {
+			continue
+		}
+		_ = mail.SendPaymentEmail("test@example.com", sched.Amount)
+	}
+	return nil
 }

@@ -1,64 +1,96 @@
-Что тут вообще?
-это REST API банковского сервиса на Go. Я пытался сделать почти всё по ТЗ, но кое-что ещё не допилил.
+# Банковский REST API на Go
 
-Кратко, что работает
+**Монолитное приложение с автосборкой через Docker Compose.**  
+Реализованы: JWT-аутентификация, счета, карты с шифрованием, переводы, кредиты, аналитика, планировщик автоплатежей и почтовые уведомления через Mailhog.
 
-Регистрация / логин через JWT  
+---
 
-Счёта  
+## старт
 
-Создание (`POST /api/accounts`)  
-Депозит/списание (`POST /api/accounts/deposit`)  
-Список (`GET /api/accounts`)  
+1. **все сервисы одной командой:**
+    ```bash
+    docker-compose up --build -d
+    ```
 
-Переводы между своими счетами в одной транзакции (`POST /api/transfer`)  
+2. **доступность сервисов:**
+    - API: [http://localhost:8080/api](http://localhost:8080/api)
+    - Почта (Mailhog): [http://localhost:8025](http://localhost:8025)
 
-Карты 
-Генерация валидного номера (алгоритм Луна)  
-Хеш CVV + HMAC  
-Возврат маскированного номера и срока  
+3. **логи:**
+    ```bash
+    docker-compose logs app
+    docker-compose logs migrate
+    docker-compose logs db
+    ```
+4. **endpoints**
+        *AUTH*
 
-Кредиты
+        POST /api/register
+        — Регистрация пользователя
+        body: { "Email": "...", "Password": "..." }
 
-Оформление кредита + расчёт аннуитета (`POST /api/credits`)  
-Сохранение графика в таблицу `payment_schedules`  
-Получение графика по ID (`GET /api/credits/{id}/schedule`)  
+        POST /api/login
+        — Логин, получить JWT
+        body: { "Email": "...", "Password": "..." }
+        response: { "token": "..." }
 
-Аналитика  
+        *ACCOUNTS*
 
-Месяц доход/расход (`GET /api/analytics/month`)  
-Кредитная нагрузка (`GET /api/analytics/credit`)  
-Прогноз баланса (`GET /api/analytics/predict?days=N`)  
-SOAP-интеграция с ЦБР(метод `GetKeyRate()` есть, но UI не проверял)  
-Транзакции и SQL через `sqlx`, всё параметризовано, защиты от SQL-инъекций.  
-Тестировал руками через `curl`.
+        POST /api/accounts
+        — Создать новый счет для пользователя
 
-Что не реализовано и почему
+        GET /api/accounts
+        — Получить список всех своих счетов
 
-PGP-шифрование карт через `pgcrypto` в БД — лень было ковыряться с ключами.  
-Cron-шедулер для автосписания платежей — Не получилось подключить `cron/v3`.  
-SMTP-уведомления (gomail.v2 + MailHog) — не получилось:( 
-Logrus вместо `log.Println`
-Полноценный ACL (проверка прав на трансфер/карты) только частично в deposit 
+        POST /api/accounts/deposit
+        — Внести или снять деньги со счета
+        body: { "account_id": ..., "amount": ... }
+        (отрицательное amount — это списание)
 
-Быстрый старт
+        POST /api/transfer
+        — Перевод между своими счетами
+        body: { "from_id": ..., "to_id": ..., "amount": ... }
 
-docker-compose up -d
+        *CARDS*
 
-миграции
+        POST /api/cards
+        — Создать карту к своему счету
+        body: { "account_id": ..., "number": "...", "exp": "...", "cvv": "..." }
+        (number, exp, cvv — опционально, если пустые — сгенерятся автоматически)
 
-cat migrations/000_init.sql    | docker exec -i $(docker-compose ps -q db) psql -U user -d banking
-cat migrations/001_accounts_cards.sql \
-                              | docker exec -i $(docker-compose ps -q db) psql -U user -d banking
-cat migrations/002_transactions_credits.sql \
-                              | docker exec -i $(docker-compose ps -q db) psql -U user -d banking
+        GET /api/cards
+        — Получить список всех своих карт
 
-настроить ENV
+        *CREDITS*
 
-export DB_HOST=localhost DB_PORT=5432 DB_USER=user DB_PASS=pass DB_NAME=banking
-export JWT_SECRET=supersecretkey
+        POST /api/credits
+        — Оформить кредит
+        body:
+        {
+        "account_id": ...,
+        "principal": ...,
+        "rate": ...,
+        "term_months": ...,
+        "margin": ...
+        }
+        GET /api/credits/{id}/schedule
+        — Получить график платежей по кредиту
 
-собрать и запустить
+        *TRANSACTIONS*
+        
+        GET /api/transactions
+        — Получить список всех своих транзакций
 
-go build ./cmd/server
-go run cmd/server/main.go
+        ANALYTICS
+        GET /api/analytics/month
+        — Доход/расход по месяцам (суммы)
+
+        GET /api/analytics/credit
+        — Текущая кредитная нагрузка
+
+        GET /api/analytics/predict?days=N
+        — Прогноз баланса на N дней вперед
+
+        Внутренние/тестовые
+        Email-уведомления отправляются на почту, которая попадает в Mailhog
+        (http://localhost:8025)

@@ -45,18 +45,26 @@ type CardService struct {
 
 func NewCardService(r *repository.CardRepo) *CardService { return &CardService{r} }
 
-func (s *CardService) Create(accountID int64) (*models.Card, error) {
-	num := luhnGenerate()
-	exp := time.Now().AddDate(3, 0, 0).Format("2006-01-02")
+func (s *CardService) Create(accountID int64, number, exp, cvv string) (*models.Card, error) {
+	num := number
+	if num == "" {
+		num = luhnGenerate()
+	}
+	expr := exp
+	if expr == "" {
+		expr = time.Now().AddDate(3, 0, 0).Format("2006-01-02")
+	}
 	c := &models.Card{
 		AccountID:   accountID,
 		NumberPlain: num,
-		ExpiryPlain: exp,
+		ExpiryPlain: expr,
 		NumberEnc:   []byte(num),
-		ExpEnc:      []byte(exp),
+		ExpEnc:      []byte(expr),
 	}
 
-	cvv := fmt.Sprintf("%03d", rand.Intn(1000))
+	if cvv == "" {
+		cvv = fmt.Sprintf("%03d", rand.Intn(1000))
+	}
 	hash, _ := bcrypt.GenerateFromPassword([]byte(cvv), bcrypt.DefaultCost)
 	hm := hmac.New(sha256.New, config.JWTSecret)
 	hm.Write([]byte(num))
@@ -66,4 +74,7 @@ func (s *CardService) Create(accountID int64) (*models.Card, error) {
 	c.HMAC = mac
 
 	return c, s.repo.Create(c)
+}
+func (s *CardService) ListByUserID(userID int64) ([]models.Card, error) {
+	return s.repo.ListByUserID(userID)
 }

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"banking-app/internal/models"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -27,6 +28,7 @@ func (r *PSRepo) CreateMany(schedules []models.PaymentSchedule) error {
 	}
 	return tx.Commit()
 }
+
 func (r *PSRepo) ByCreditID(creditID int64) ([]models.PaymentSchedule, error) {
 	var sched []models.PaymentSchedule
 	err := r.db.Select(
@@ -51,4 +53,23 @@ func (r *PSRepo) MarkPaid(id int64) error {
 	_, err := r.db.Exec(
 		`UPDATE payment_schedules SET paid=true WHERE id=$1`, id)
 	return err
+}
+
+func (r *PSRepo) UnpaidDue(now time.Time) ([]struct {
+	ID        int64
+	AccountID int64
+	Amount    float64
+}, error) {
+	var xs []struct {
+		ID        int64
+		AccountID int64
+		Amount    float64
+	}
+	err := r.db.Select(&xs, `
+		SELECT ps.id, c.account_id, ps.amount
+		FROM payment_schedules ps
+		JOIN credits c ON ps.credit_id = c.id
+		WHERE ps.paid=false AND ps.due_date<= $1
+	`, now)
+	return xs, err
 }

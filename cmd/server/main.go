@@ -1,17 +1,18 @@
 package main
 
 import (
-	"log"
 	"net/http"
 
-	"github.com/gorilla/mux"
-	// "github.com/robfig/cron/v3"
 	"banking-app/internal/handler"
 	"banking-app/internal/middleware"
 	"banking-app/internal/repository"
 	"banking-app/internal/service"
 	"banking-app/pkg/database"
 	"banking-app/pkg/jwt"
+
+	"github.com/gorilla/mux"
+	"github.com/robfig/cron/v3"
+	log "github.com/sirupsen/logrus"
 )
 
 func main() {
@@ -29,7 +30,7 @@ func main() {
 	as := service.NewAccountService(ar, tr)
 	cs := service.NewCardService(cr)
 	ts := service.NewTransactionService(tr)
-	cds := service.NewCreditService(crd, psr)
+	cds := service.NewCreditService(crd, psr, ar)
 	an := service.NewAnalyticsService(tr, crd, ar)
 
 	uh := handler.NewUserHandler(us)
@@ -39,12 +40,14 @@ func main() {
 	cdh := handler.NewCreditHandler(cds)
 	anh := handler.NewAnalyticsHandler(an)
 
-	// cronJob := cron.New()
-	// cronJob.AddFunc("@every 12h", func() {
-	// 	// TODO: DebitScheduledPayments()
-	// 	log.Println("Scheduler tick")
-	// })
-	// cronJob.Start()
+	c := cron.New()
+	c.AddFunc("@every 12h", func() {
+		if err := cds.DebitScheduledPayments(); err != nil {
+			log.Error("Scheduler error: ", err)
+		}
+		log.Info("Auto payments done!")
+	})
+	c.Start()
 
 	r := mux.NewRouter()
 	r.Use(middleware.Logger)
@@ -61,6 +64,8 @@ func main() {
 	sec.HandleFunc("/transfer", ah.Transfer).Methods("POST")
 
 	sec.HandleFunc("/cards", ch.Create).Methods("POST")
+	sec.HandleFunc("/cards", ch.List).Methods("GET")
+
 	sec.HandleFunc("/transactions", th.List).Methods("GET")
 	sec.HandleFunc("/credits", cdh.Create).Methods("POST")
 	sec.HandleFunc("/credits/{id}/schedule", cdh.Schedule).Methods("GET")
@@ -68,6 +73,6 @@ func main() {
 	sec.HandleFunc("/analytics/month", anh.MonthStats).Methods("GET")
 	sec.HandleFunc("/analytics/credit", anh.CreditLoad).Methods("GET")
 	sec.HandleFunc("/analytics/predict", anh.Predict).Methods("GET")
-	log.Println("Server listening on :8080")
+	log.Info("Server listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", r))
 }

@@ -2,7 +2,9 @@ package jwt
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"banking-app/config"
@@ -35,4 +37,20 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), UserIDKey, claims.Subject)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func GetUserIDFromRequest(r *http.Request) (int64, error) {
+	val := r.Context().Value(UserIDKey)
+	if val == nil {
+		return 0, errors.New("no user id in context")
+	}
+	userIDStr, ok := val.(string)
+	if !ok {
+		return 0, errors.New("user id in context is not string")
+	}
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		return 0, errors.New("user id not int")
+	}
+	return userID, nil
 }
